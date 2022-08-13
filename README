@@ -1,0 +1,28 @@
+Transformer Neural Networks in Pytorch
+
+The programs in this repository are designed to solve sequence based problems using Transformers.
+This repository was made for personal research and is still being updated.
+
+The packages used are mainly pytorch, torchtext, numpy and matplotlib
+
+The biggest challenged faced was memory optimization for parallel processing on CUDA.  I often found “cuda runtime error(2): out of memory” errors while trying to
+run the code.  After reducing the batch size to 1, I found that reducing the sequence length of the inputs was best in reducing the memory usage.  This is likely 
+a result of the attention mechanism where every relation between each element to every other element in the input is stored.  This means that an increase in sequence 
+length results in an exponential increase in memory usage.
+
+Currently, there is only one example in the repository.  In the future I would like to add more examples and to make more readable code.
+
+To run the program(s) in this repository, download the programs and install the packages that are imported to your Python instance.  There may be datasets used where
+the download process was not included in the code.  The respective datasets used will be commented at the top of the source code if this is the case.
+
+Author: Adam Marvin
+
+Below are references to resources that helped me build this project.  Any links are functional as of 8/14/2022
+
+A. Viswani, Attention Is All You Need, 6 Dec 2017
+
+Aladdin Persson, Pytorch Transformers from Scratch (Attention is all you need) , 23 Jun 2020, https://www.youtube.com/watch?v=U0s0f995w14&t=1454s
+Aladdin Persson, Pytorch Transformers for Machine Translation, 23 Jun 2020, https://www.youtube.com/watch?v=M6adRGJe5cQ&t=534s
+Hedu AI (YouTube channel name), Visual Guide to Transformer Neural Networks - (Episode 1) Position Embeddings, 8 Dec 2020,https://www.youtube.com/watch?v=dichIcUZfOw&t=402s
+
+
