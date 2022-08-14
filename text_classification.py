@@ -1,17 +1,20 @@
 import math
 import os
-from typing import Text
 import pandas as pd
 import spacy
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, Dataset
-import numpy as np
 import torch.nn as nn
+import torch.nn.functional as F
+spacy_english = spacy.load("en_core_web_sm") # Use "python -m spacy download en_core_web_sm" in terminal
 
-spacy_english = spacy.load("en_core_web_sm")
+### Dataset Used: IMDB Dataset of 50K Movie Reviews 
 
-device = 'cuda'
+### Link: https://www.kaggle.com/datasets/lakshmi25npathi/imdb-dataset-of-50k-movie-reviews
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(device)
 class Vocabulary:
     def __init__(self, freq_threshold):
         self.itos = {0:"<PAD>", 1:"<SOS>", 2:"<EOS>", 3: "<UNK>"}
@@ -51,8 +54,8 @@ class Vocabulary:
 
 
 class IMDB_Dataset(Dataset):
-    def __init__(self, src, transform=None, freq_threshold=5):
-        self.df = pd.read_csv(src, nrows=1000)
+    def __init__(self, src, transform=None, freq_threshold=5, nrows=5000, skiprows=0):
+        self.df = pd.read_csv(src, nrows=nrows, skiprows=skiprows)
         self.transform = transform
 
         self.reviews = self.df["review"]
@@ -67,13 +70,18 @@ class IMDB_Dataset(Dataset):
     
     def __getitem__(self, index):
         review = self.reviews[index]
-        sentiment = 1 if self.sentiments[index] == "positive" else 0
-
+        sentiment = [1, 0] if self.sentiments[index] == "positive" else [0, 1]
         numericalized_review = [self.vocab.stoi["<SOS>"]]
         numericalized_review += self.vocab.numericalize(review)
         numericalized_review.append(self.vocab.stoi["<EOS>"])
 
-        return torch.Tensor(numericalized_review).to(torch.int32),  int(sentiment)
+        return torch.Tensor(numericalized_review).to(torch.int32),  sentiment
+    
+    def numericalize(self, text):
+        numericalized = [self.vocab.stoi["<SOS>"]]
+        numericalized += self.vocab.numericalize(text)
+        numericalized.append(self.vocab.stoi["<EOS>"])
+        return numericalized
 
 class Collate:
     def __init__(self, pad_idx):
@@ -82,17 +90,17 @@ class Collate:
         reviews = [item[0] for item in batch]
         sentiments = [item[1] for item in batch]
         reviews = pad_sequence(reviews, batch_first=False, padding_value=self.pad_idx)
-        return reviews, torch.LongTensor(sentiments)
+        return reviews, torch.Tensor(sentiments)
 
 def get_loader(
     root_folder,
     transform,
-    batch_size=1,
+    batch_size=3,
     shuffle=True,
     pin_memory=True
 ):
     dataset = IMDB_Dataset(root_folder, transform=transform)
-
+    
     pad_idx = dataset.vocab.stoi["<PAD>"]
 
     loader = DataLoader(
@@ -105,9 +113,10 @@ def get_loader(
 
     return loader
 
-dataloader = get_loader("C:/Users/adamm/AI/Transformer/Datasets/IMDB_Dataset.csv", None)
+filepath = ""
+dataloader = get_loader(filepath, None)
 class ReviewClassifier(nn.Module):
-    def __init__(self, vocab_size, max_length, d_model,dim_feedforward, dropout=0.0, layers=6, n_heads=8):
+    def __init__(self, vocab_size, max_length, d_model, dim_feedforward, dropout=0.1, layers=6, n_heads=8):
         super().__init__()
         self.emb = nn.Embedding(vocab_size, d_model)
         self.emb_pos = nn.Embedding(max_length, d_model)
@@ -135,17 +144,21 @@ class ReviewClassifier(nn.Module):
 
 
 
-epochs = 50
-lr = 1e-4
-model = ReviewClassifier(len(dataloader.dataset.vocab.stoi), 10, 8, 512).to(device)
+epochs = 8
+lr = 0.01
+model = ReviewClassifier(len(dataloader.dataset.vocab.stoi), 50, 128, 2048).to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+
+with torch.no_grad():
+    print(F.softmax(model(torch.LongTensor([dataloader.dataset.numericalize("This movie is really bad")]).T.to(device))))
 
 for epoch in range(epochs):
     epoch_loss = 0
+    correct=0
     for idx, (reviews, labels) in enumerate(dataloader):
-        reviews = reviews[:, :10].to(device)
-        labels = labels.to(device)
+        reviews = reviews[:, :50].to(device)
+        labels = torch.Tensor(labels).to(device)
         predictions = model(reviews)
         loss = criterion(predictions, labels)
         epoch_loss += float(loss)
@@ -154,3 +167,7 @@ for epoch in range(epochs):
         optimizer.zero_grad()
 
     print(f"{epoch+1}/{epochs}, loss={epoch_loss}")
+
+
+
+print(F.softmax(model(torch.LongTensor([dataloader.dataset.numericalize("This movie is really bad")]).T.to(device))))
